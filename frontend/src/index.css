@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: #030712;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0f0f2e;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4c1d95;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6d28d9;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-slate-900 border border-slate-800 rounded-2xl;
+  }
+
+  .btn-primary {
+    @apply bg-violet-600 hover:bg-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl
+           transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
+           flex items-center gap-2 justify-center;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-5 py-2.5 rounded-xl
+           transition-all duration-200 border border-slate-700
+           flex items-center gap-2 justify-center;
+  }
+
+  .btn-success {
+    @apply bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-5 py-2.5 rounded-xl
+           transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
+           flex items-center gap-2 justify-center;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-500 text-white font-semibold px-5 py-2.5 rounded-xl
+           transition-all duration-200 flex items-center gap-2 justify-center;
+  }
+
+  .input-field {
+    @apply bg-slate-800 border border-slate-700 text-slate-100 rounded-xl px-4 py-2.5
+           focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
+           placeholder-slate-500 transition-all duration-200 w-full;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-slate-400 mb-1.5;
+  }
+
+  .drop-zone {
+    @apply border-2 border-dashed border-slate-700 rounded-2xl p-8 flex flex-col items-center justify-center
+           gap-3 cursor-pointer transition-all duration-200
+           hover:border-violet-500 hover:bg-violet-950/20;
+  }
+
+  .drop-zone-active {
+    @apply border-violet-400 bg-violet-950/30;
+  }
+
+  .step-tab {
+    @apply flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm
+           transition-all duration-200 cursor-pointer border border-transparent;
+  }
+
+  .step-tab-active {
+    @apply bg-violet-600/20 border-violet-600/40 text-violet-300;
+  }
+
+  .step-tab-done {
+    @apply text-emerald-400;
+  }
+
+  .step-tab-inactive {
+    @apply text-slate-500 cursor-not-allowed;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .badge-success {
+    @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+  }
+
+  .badge-error {
+    @apply bg-red-500/20 text-red-400 border border-red-500/30;
+  }
+
+  .badge-warning {
+    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30;
+  }
+
+  .badge-info {
+    @apply bg-blue-500/20 text-blue-400 border border-blue-500/30;
+  }
+
+  .badge-purple {
+    @apply bg-violet-500/20 text-violet-400 border border-violet-500/30;
+  }
+}
+
+/* Animated gradient background */
+.gradient-bg {
+  background: radial-gradient(ellipse at top left, #1e1b4b 0%, #030712 50%),
+              radial-gradient(ellipse at bottom right, #1e3a5f 0%, transparent 60%);
+}
+
+/* Glow effects */
+.glow-violet {
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+/* Progress bar */
+.progress-bar {
+  background: linear-gradient(90deg, #7c3aed, #3b82f6);
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+/* RTL text for Hebrew preview */
+.rtl-text {
+  direction: rtl;
+  unicode-bidi: bidi-override;
+}
