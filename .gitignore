@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# WhatsApp session (personal data + cookies — never commit!)
+backend/whatsapp_session/
+
+# Runtime-generated directories
+backend/uploads/
+backend/outputs/
+
+# Fonts (downloaded automatically by start.bat / start.sh)
+backend/fonts/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.suo
+.vscode/settings.json
+
+# Excel temp files
+~$*.xlsx
+~$*.xls
