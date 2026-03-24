@@ -288,10 +288,16 @@ class WhatsAppService:
                     pass
 
         # ── Send ──────────────────────────────────────────────────────────────
-        # WhatsApp Web 2026: send button may not have data-testid; try aria-label too.
+        # WhatsApp Web 2026 (Hebrew): the media-preview send button has
+        #   aria-label="שליחה"  and  data-icon="wds-ic-send-filled"
         sent = await self._click_first_visible(
             [
-                # Media editor send button (the green circle with arrow)
+                # Actual Hebrew UI labels found in DOM (2026)
+                'div[aria-label="שליחה"]',
+                '[data-icon="wds-ic-send-filled"]',
+                'button[aria-label="שליחה"]',
+                'span[aria-label="שליחה"]',
+                # English / legacy variants
                 'div[aria-label="שלח"]',
                 'div[aria-label="Send"]',
                 'button[aria-label="שלח"]',
@@ -302,42 +308,85 @@ class WhatsAppService:
                 'button[data-testid="send"]',
                 'span[data-testid="send"]',
                 'div[data-testid="send"]',
-                # data-icon variants
+                # data-icon legacy variants
                 '[data-icon="send"]',
                 '[data-icon="send-light"]',
             ]
         )
         if not sent:
-            # Last resort: any visible button in the media-confirmation footer
+            # Specific media-confirmation container
             try:
-                btn = self._page.locator('div[data-testid="media-confirmation-actions-send"], span[role="button"]').last
+                btn = self._page.locator('div[data-testid="media-confirmation-actions-send"]').first
                 if await btn.is_visible():
                     await btn.click()
                     sent = True
             except Exception:
                 pass
         if not sent:
-            # Final fallback: Enter key sends in WhatsApp Web media editor
+            # Enter key as last resort — only accepted if the media preview then closes
             try:
                 await self._page.keyboard.press("Enter")
+                await asyncio.sleep(1.2)
+                # If the media-preview send button is STILL visible, Enter did nothing
+                preview_still_open = await self._page.locator(
+                    '[data-icon="wds-ic-send-filled"], div[aria-label="שליחה"], button[aria-label="שליחה"]'
+                ).first.is_visible()
+                if preview_still_open:
+                    raise RuntimeError(
+                        f"Could not send image to {phone}: Enter key did not close the media preview. "
+                        "The message was NOT sent."
+                    )
                 sent = True
+            except RuntimeError:
+                raise
             except Exception:
                 pass
         if not sent:
             raise RuntimeError("Could not find the send button in WhatsApp Web.")
 
-        await asyncio.sleep(2.5)  # wait for delivery
-
-        # ── Verify: check that the page did not show a "not on WhatsApp" error ─
-        # WhatsApp Web reloads to the main screen with a popup when the number is invalid.
-        # If we're no longer in a chat (no compose box visible) it means the send failed.
+        # ── Step 1: wait for the media preview overlay to close ───────────────
+        # The media-preview send button disappearing means the overlay was dismissed.
+        # (Using the same selectors we just clicked — they must become hidden.)
+        await asyncio.sleep(0.5)  # let the send animation start
+        media_preview_selector = (
+            '[data-icon="wds-ic-send-filled"], '
+            'div[aria-label="שליחה"], button[aria-label="שליחה"]'
+        )
         try:
-            still_in_chat = await self._page.locator(
-                'div[contenteditable="true"][aria-placeholder], '
-                'footer div[contenteditable="true"]'
-            ).first.is_visible()
-            if not still_in_chat:
-                # Check for error popup
+            await self._page.locator(media_preview_selector).first.wait_for(
+                state="hidden", timeout=15000
+            )
+        except Exception:
+            # If wait_for timed out, check whether the preview is actually still open
+            try:
+                still_open = await self._page.locator(media_preview_selector).first.is_visible()
+            except Exception:
+                still_open = False
+            if still_open:
+                raise RuntimeError(
+                    f"Send to {phone} failed: media preview is still open after 15 s. "
+                    "The message was NOT sent."
+                )
+
+        # ── Step 2: wait for the main chat compose box to reappear ────────────
+        # Use selectors that are SPECIFIC to the chat compose area.
+        # Deliberately excludes 'div[contenteditable][aria-placeholder]' which can
+        # also match the caption input on the (now-closed, but still-in-DOM) media preview.
+        chat_compose_selectors = (
+            'div[contenteditable="true"][data-tab="10"], '
+            'div[contenteditable="true"][data-tab="6"], '
+            'footer div[contenteditable="true"], '
+            'div[data-testid="conversation-compose-box-input"]'
+        )
+        try:
+            await self._page.wait_for_selector(
+                chat_compose_selectors,
+                state="visible",
+                timeout=15000,
+            )
+        except Exception:
+            # Before giving up check for an invalid-number popup
+            try:
                 popup_visible = await self._page.locator(
                     'div[data-testid="popup-contents"], div[role="dialog"], '
                     'div[data-testid="alert-dialog"]'
@@ -349,10 +398,34 @@ class WhatsAppService:
                     raise ValueError(
                         f"Phone number {phone} is not on WhatsApp: {popup_text.strip()[:120]}"
                     )
-        except (ValueError, RuntimeError):
+            except ValueError:
+                raise
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"Send timed out for {phone}: WhatsApp did not return to the chat after 15 s. "
+                "The message was probably NOT sent."
+            )
+
+        await asyncio.sleep(0.5)
+
+        # ── Step 3: verify a delivery indicator is visible ────────────────────
+        # data-icon="msg-time"     → clock  (pending / just sent to server)
+        # data-icon="msg-check"    → ✓      (sent to server)
+        # data-icon="msg-dblcheck" → ✓✓     (delivered / read)
+        try:
+            indicator_visible = await self._page.locator(
+                '[data-icon="msg-time"], [data-icon="msg-check"], [data-icon="msg-dblcheck"]'
+            ).last.is_visible()
+            if not indicator_visible:
+                raise RuntimeError(
+                    f"No delivery indicator found after sending to {phone}. "
+                    "The message was NOT sent."
+                )
+        except RuntimeError:
             raise
         except Exception:
-            pass  # non-critical check
+            pass  # best-effort; steps 1 & 2 are the primary guards
 
         return True
 

@@ -59,7 +59,7 @@ if not exist "fonts\Alef-Regular.ttf" (
 
 :: ── Start backend ─────────────────────────────────────────────────────────
 echo [5/5] Starting backend server on http://localhost:8000 ...
-start "Backend - WhatsApp Greeting" cmd /k "cd /d "%~dp0backend" && call venv\Scripts\activate.bat && uvicorn main:app --reload --host 127.0.0.1 --port 8000"
+start "Backend - WhatsApp Greeting" cmd /k "cd /d "%~dp0backend" && call venv\Scripts\activate.bat && python run.py"
 timeout /t 3 /nobreak >nul
 
 :: ── Frontend setup ────────────────────────────────────────────────────────
