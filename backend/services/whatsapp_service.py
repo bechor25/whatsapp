@@ -172,72 +172,72 @@ class WhatsAppService:
         await asyncio.sleep(1.5)  # let UI fully settle
 
         # ── Attach image ──────────────────────────────────────────────────────
-        # Strategy 1 (fastest): WhatsApp Web always keeps a hidden input[type="file"]
-        # in the DOM. Playwright's set_input_files works on hidden inputs directly
-        # without needing to click any button.
+        # CRITICAL: always go through the "+" menu → "תמונות וסרטונים".
+        # WhatsApp Web uses a SINGLE hidden input[type=file] for ALL attachment
+        # types (photos, stickers, documents). The type is determined by which
+        # menu item was clicked to trigger the file chooser.
+        # Calling set_input_files directly (without a prior menu click) causes
+        # WhatsApp to send the file as a STICKER instead of a photo.
         file_set = False
-        for selector in [
-            'input[accept="image/*"]',
-            'input[accept*="image"][type="file"]',
-            'input[type="file"]',
-        ]:
-            try:
-                el = self._page.locator(selector).first
-                if await el.count() > 0:
-                    await el.set_input_files(abs_path)
-                    file_set = True
-                    break
-            except Exception:
-                pass
+
+        attach_btn_selectors = [
+            '[data-icon="plus-rounded"]',
+            '[data-icon="attach-menu-plus"]',
+            '[data-icon="clip"]',
+            '[data-icon="attach"]',
+            'button[aria-label="צרף"]',
+            'button[aria-label="Attach"]',
+            'button[data-testid="compose-btn-attachment"]',
+            'span[data-testid="attach-btn"]',
+        ]
+        # DOM-verified (2026-03) aria-label of the "Photos & Videos" menu item.
+        # Must come first — other selectors are legacy / English fallbacks.
+        photos_menu_selectors = [
+            '[aria-label="תמונות וסרטונים"]',   # Hebrew 2026
+            '[aria-label="תמונות וסרטוני וידאו"]',
+            '[aria-label="Photos & videos"]',
+            '[aria-label="Photos, GIF, Videos"]',
+            'li[data-testid="mi-attach-image"]',
+            '[data-icon="image"]',
+        ]
+
+        # Strategy 1: open the "+" menu first, THEN intercept the file-chooser
+        # triggered specifically by the Photos menu item.
+        # Splitting the steps (open menu → wait → start chooser listener → click
+        # Photos) avoids a race where the listener starts too late.
+        try:
+            # Step A: open the attach dropdown
+            opened = await self._click_first_visible(attach_btn_selectors)
+            if not opened:
+                raise RuntimeError("Could not open attach menu")
+            await asyncio.sleep(0.7)  # wait for the menu to render
+
+            # Step B: intercept the file-chooser opened by the Photos item
+            async with self._page.expect_file_chooser(timeout=6000) as fc_info:
+                clicked = await self._click_first_visible(photos_menu_selectors)
+                if not clicked:
+                    raise RuntimeError("Photos menu item not found")
+            file_chooser = await fc_info.value
+            await file_chooser.set_files(abs_path)
+            file_set = True
+        except Exception:
+            pass
 
         if not file_set:
-            # Strategy 2: click the "+" / attach button, then retry the input.
-            # DOM inspection (2026) shows the icon is "plus-rounded".
-            await self._click_first_visible([
-                '[data-icon="plus-rounded"]',
-                '[data-icon="attach-menu-plus"]',
-                '[data-icon="clip"]',
-                '[data-icon="attach"]',
-                'button[aria-label="צרף"]',
-                'button[aria-label="Attach"]',
-                'button[data-testid="compose-btn-attachment"]',
-                'span[data-testid="attach-btn"]',
-            ])
-            await asyncio.sleep(0.5)
-
-            # After the menu opens, try clicking "Photos, GIF, Videos" entry
-            await self._click_first_visible([
-                'li[data-testid="mi-attach-image"]',
-                '[data-icon="image"]',
-            ])
-            await asyncio.sleep(0.4)
-
-            for selector in [
-                'input[accept="image/*"]',
-                'input[accept*="image"][type="file"]',
-                'input[type="file"]',
-            ]:
-                try:
-                    el = self._page.locator(selector).first
-                    if await el.count() > 0:
-                        await el.set_input_files(abs_path)
-                        file_set = True
-                        break
-                except Exception:
-                    pass
-
-        if not file_set:
-            # Strategy 3: expose hidden input via JS then set files
+            # Strategy 2: same flow, but dismiss and retry once in case the
+            # menu closed on its own or the first attempt left stale state.
             try:
-                await self._page.evaluate(
-                    "() => document.querySelectorAll('input[type=\"file\"]')"
-                    ".forEach(e => { e.style.display='block'; e.style.opacity='1'; })"
-                )
-                await asyncio.sleep(0.2)
-                el = self._page.locator('input[type="file"]').first
-                if await el.count() > 0:
-                    await el.set_input_files(abs_path)
-                    file_set = True
+                await self._page.keyboard.press("Escape")
+                await asyncio.sleep(0.4)
+                opened = await self._click_first_visible(attach_btn_selectors)
+                if not opened:
+                    raise RuntimeError("Could not open attach menu (retry)")
+                await asyncio.sleep(0.7)
+                async with self._page.expect_file_chooser(timeout=6000) as fc_info:
+                    await self._click_first_visible(photos_menu_selectors)
+                file_chooser = await fc_info.value
+                await file_chooser.set_files(abs_path)
+                file_set = True
             except Exception:
                 pass
 
@@ -249,7 +249,25 @@ class WhatsAppService:
                 pass
             raise RuntimeError("Could not attach image file. Screenshot saved to outputs/wa_debug.png")
 
-        await asyncio.sleep(2.0)  # wait for image preview to appear
+        # ── Wait for the media preview to actually open ───────────────────────
+        # STRICT selector: requires BOTH aria-label="שליחה" AND the send icon as a
+        # direct descendant (:has). This avoids false-matching the "עדכן את WhatsApp"
+        # update notification or any other element that only partially matches.
+        MEDIA_PREVIEW_SEND_SEL = '[aria-label="שליחה"]:has([data-icon="wds-ic-send-filled"])'
+        try:
+            await self._page.wait_for_selector(
+                MEDIA_PREVIEW_SEND_SEL, state="visible", timeout=15000
+            )
+        except Exception:
+            try:
+                ss_dir = os.path.join(os.path.dirname(self.session_dir), "outputs")
+                await self._page.screenshot(path=os.path.join(ss_dir, "wa_nopreview.png"))
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"Media preview did not open for {phone}. "
+                "The image was not attached (screenshot saved to outputs/wa_nopreview.png)."
+            )
 
         # ── Debug: dump send-screen DOM ───────────────────────────────────────
         try:
@@ -288,48 +306,57 @@ class WhatsAppService:
                     pass
 
         # ── Send ──────────────────────────────────────────────────────────────
-        # WhatsApp Web 2026 (Hebrew): the media-preview send button has
-        #   aria-label="שליחה"  and  data-icon="wds-ic-send-filled"
-        sent = await self._click_first_visible(
-            [
-                # Actual Hebrew UI labels found in DOM (2026)
-                'div[aria-label="שליחה"]',
-                '[data-icon="wds-ic-send-filled"]',
-                'button[aria-label="שליחה"]',
-                'span[aria-label="שליחה"]',
-                # English / legacy variants
-                'div[aria-label="שלח"]',
-                'div[aria-label="Send"]',
-                'button[aria-label="שלח"]',
-                'button[aria-label="Send"]',
-                'span[aria-label="שלח"]',
-                'span[aria-label="Send"]',
-                # data-testid variants
+        # Use JavaScript to click the element that has BOTH aria-label="שליחה"
+        # AND the wds-ic-send-filled icon inside it. This is the strictest possible
+        # identifier and cannot be confused with the update-notification button.
+        sent = await self._page.evaluate("""
+() => {
+    // Primary: שליחה element that contains the specific media-preview send icon
+    for (const el of document.querySelectorAll('[aria-label="\u05e9\u05dc\u05d9\u05d7\u05d4"]')) {
+        if (!el.querySelector('[data-icon="wds-ic-send-filled"]')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0 && el.offsetParent !== null) {
+            el.click();
+            return true;
+        }
+    }
+    // Fallback: climb up from the icon itself
+    for (const icon of document.querySelectorAll('[data-icon="wds-ic-send-filled"]')) {
+        const t = icon.closest('[aria-label]') ||
+                  icon.closest('button') ||
+                  icon.closest('div[role="button"]') ||
+                  icon.parentElement;
+        if (!t) continue;
+        const r = t.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0 && t.offsetParent !== null) {
+            t.click();
+            return true;
+        }
+    }
+    return false;
+}
+""")
+        if not sent:
+            # Playwright-level fallback using the same strict :has() selector
+            sent = await self._click_first_visible([
+                '[aria-label="שליחה"]:has([data-icon="wds-ic-send-filled"])',
+                '[aria-label="שלח"]:has([data-icon])',
+                '[aria-label="Send"]:has([data-icon])',
                 'button[data-testid="send"]',
-                'span[data-testid="send"]',
-                'div[data-testid="send"]',
-                # data-icon legacy variants
+                'div[data-testid="media-confirmation-actions-send"]',
                 '[data-icon="send"]',
                 '[data-icon="send-light"]',
-            ]
-        )
+            ])
         if not sent:
-            # Specific media-confirmation container
-            try:
-                btn = self._page.locator('div[data-testid="media-confirmation-actions-send"]').first
-                if await btn.is_visible():
-                    await btn.click()
-                    sent = True
-            except Exception:
-                pass
-        if not sent:
-            # Enter key as last resort — only accepted if the media preview then closes
+            # Enter key as last resort — only accepted if the media preview then closes.
+            # The preview is CONFIRMED open at this point (we waited above), so if the
+            # send button is still visible after Enter, Enter did nothing useful.
             try:
                 await self._page.keyboard.press("Enter")
-                await asyncio.sleep(1.2)
-                # If the media-preview send button is STILL visible, Enter did nothing
+                await asyncio.sleep(1.5)
+                # The send button must have disappeared (preview closed) for Enter to count
                 preview_still_open = await self._page.locator(
-                    '[data-icon="wds-ic-send-filled"], div[aria-label="שליחה"], button[aria-label="שליחה"]'
+                    MEDIA_PREVIEW_SEND_SEL
                 ).first.is_visible()
                 if preview_still_open:
                     raise RuntimeError(
@@ -348,18 +375,14 @@ class WhatsAppService:
         # The media-preview send button disappearing means the overlay was dismissed.
         # (Using the same selectors we just clicked — they must become hidden.)
         await asyncio.sleep(0.5)  # let the send animation start
-        media_preview_selector = (
-            '[data-icon="wds-ic-send-filled"], '
-            'div[aria-label="שליחה"], button[aria-label="שליחה"]'
-        )
         try:
-            await self._page.locator(media_preview_selector).first.wait_for(
+            await self._page.locator(MEDIA_PREVIEW_SEND_SEL).first.wait_for(
                 state="hidden", timeout=15000
             )
         except Exception:
             # If wait_for timed out, check whether the preview is actually still open
             try:
-                still_open = await self._page.locator(media_preview_selector).first.is_visible()
+                still_open = await self._page.locator(MEDIA_PREVIEW_SEND_SEL).first.is_visible()
             except Exception:
                 still_open = False
             if still_open:
@@ -409,10 +432,12 @@ class WhatsAppService:
 
         await asyncio.sleep(0.5)
 
-        # ── Step 3: verify a delivery indicator is visible ────────────────────
-        # data-icon="msg-time"     → clock  (pending / just sent to server)
-        # data-icon="msg-check"    → ✓      (sent to server)
-        # data-icon="msg-dblcheck" → ✓✓     (delivered / read)
+        # ── Step 3: verify a delivery indicator exists (best-effort) ────────────
+        # data-icon="msg-time" / "msg-check" / "msg-dblcheck" = sent / delivered / read
+        # WhatsApp Web 2026 has NO data-testid on message container elements, so we
+        # cannot scope to "last message row". Instead we verify that at least one
+        # such icon is visible anywhere in the chat — if zero exist the send likely
+        # failed. Steps 1 & 2 are the primary guards; this is a secondary check only.
         try:
             indicator_visible = await self._page.locator(
                 '[data-icon="msg-time"], [data-icon="msg-check"], [data-icon="msg-dblcheck"]'
