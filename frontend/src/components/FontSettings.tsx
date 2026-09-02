@@ -32,15 +32,16 @@ export default function FontSettings({ config, onChange }: Props) {
           <Type className="w-5 h-5 text-purple-400" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-100">Text Settings</h3>
-          <p className="text-xs text-slate-500">Font, size, colour, and alignment for the name</p>
+          <h2 className="font-semibold text-slate-100">Text Settings</h2>
+          <p className="text-xs text-slate-400">Font, size, colour, and alignment for the name</p>
         </div>
       </div>
 
       {/* Font selector */}
       <div>
-        <label className="label">Font Family</label>
+        <label className="label" htmlFor="font-family">Font Family</label>
         <select
+          id="font-family"
           className="input-field"
           value={config.fontName}
           onChange={(e) => set({ fontName: e.target.value })}
@@ -52,16 +53,17 @@ export default function FontSettings({ config, onChange }: Props) {
           ))}
           {fonts.length === 0 && <option value="Arial">Arial (default)</option>}
         </select>
-        <p className="text-xs text-slate-600 mt-1">
+        <p className="text-xs text-slate-400 mt-1">
           ★ = bundled Hebrew font in backend/fonts/
         </p>
       </div>
 
       {/* Font size */}
       <div>
-        <label className="label">Font Size — {config.fontSize}px</label>
+        <label className="label" htmlFor="font-size">Font Size — {config.fontSize}px</label>
         <div className="flex items-center gap-3">
           <input
+            id="font-size"
             type="range"
             min={12}
             max={300}
@@ -83,16 +85,21 @@ export default function FontSettings({ config, onChange }: Props) {
 
       {/* Font colour */}
       <div>
-        <label className="label">Font Colour</label>
+        <span className="label" id="font-colour-label">Font Colour</span>
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="w-10 h-10 rounded-xl border-2 border-slate-600 shrink-0 shadow-inner"
+            aria-label={`Font colour, currently ${config.fontColor}. Open colour picker`}
+            aria-expanded={showCP}
+            className="w-10 h-10 rounded-xl border-2 border-slate-600 shrink-0 shadow-inner cursor-pointer
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400
+                       focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
             style={{ backgroundColor: config.fontColor }}
             onClick={() => setShowCP(!showCP)}
           />
           <input
             type="text"
+            aria-labelledby="font-colour-label"
             value={config.fontColor}
             onFocus={() => setShowCP(true)}
             onChange={(e) => set({ fontColor: e.target.value })}
@@ -119,8 +126,9 @@ export default function FontSettings({ config, onChange }: Props) {
       {/* Stroke */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="label">Stroke / Outline — {config.strokeWidth}px</label>
+          <label className="label" htmlFor="stroke-width">Stroke / Outline — {config.strokeWidth}px</label>
           <input
+            id="stroke-width"
             type="range"
             min={0}
             max={10}
@@ -131,8 +139,9 @@ export default function FontSettings({ config, onChange }: Props) {
           />
         </div>
         <div>
-          <label className="label">Stroke Colour</label>
+          <label className="label" htmlFor="stroke-colour">Stroke Colour</label>
           <input
+            id="stroke-colour"
             type="color"
             value={config.strokeColor}
             onChange={(e) => set({ strokeColor: e.target.value })}
@@ -143,28 +152,31 @@ export default function FontSettings({ config, onChange }: Props) {
 
       {/* Alignment */}
       <div>
-        <label className="label">Text Alignment</label>
-        <div className="flex gap-2">
+        <span className="label" id="text-align-label">Text Alignment</span>
+        <div className="flex gap-2" role="group" aria-labelledby="text-align-label">
           {ALIGNS.map(({ v, Icon, label }) => (
             <button
               key={v}
               type="button"
               onClick={() => set({ align: v })}
+              aria-pressed={config.align === v}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-sm font-medium transition-all duration-150
+                min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2
+                focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900
                 ${config.align === v
                   ? 'bg-violet-600/30 border-violet-500 text-violet-300'
                   : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'
                 }`}
               title={label}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4" aria-hidden="true" />
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      <p className="text-xs text-slate-600 italic">
+      <p className="text-xs text-slate-400 italic">
         💡 Drag the name text directly on the Preview panel to reposition it.
       </p>
     </div>

@@ -1,4 +1,4 @@
-import { Play, StopCircle, Clock, Users, MessageCircle, Image as ImageIcon, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Play, StopCircle, Clock, Users, MessageCircle, Image as ImageIcon, RotateCcw, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import type { Contact, ProcessingState } from '../types'
 
@@ -48,8 +48,8 @@ export default function ProcessingPanel({
           <Play className="w-5 h-5 text-emerald-400" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-100">Send Messages</h3>
-          <p className="text-xs text-slate-500">Generate images and optionally send via WhatsApp</p>
+          <h2 className="font-semibold text-slate-100">Send Messages</h2>
+          <p className="text-xs text-slate-400">Generate images and optionally send via WhatsApp</p>
         </div>
       </div>
 
@@ -58,13 +58,13 @@ export default function ProcessingPanel({
         {[
           { label: 'Contacts', value: contacts.length, icon: Users,         color: 'text-violet-400'  },
           { label: 'WhatsApp', value: whatsappReady ? 'Ready' : 'Not set',
-            icon: MessageCircle, color: whatsappReady ? 'text-emerald-400' : 'text-slate-500' },
+            icon: MessageCircle, color: whatsappReady ? 'text-emerald-400' : 'text-slate-400' },
           { label: 'Template', value: hasImage ? 'Loaded' : 'Missing',
             icon: ImageIcon,    color: hasImage ? 'text-blue-400' : 'text-red-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="card p-3 flex flex-col gap-1">
             <Icon className={`w-4 h-4 ${color}`} />
-            <span className="text-xs text-slate-500">{label}</span>
+            <span className="text-xs text-slate-400">{label}</span>
             <span className={`font-semibold text-sm ${color}`}>{value}</span>
           </div>
         ))}
@@ -73,32 +73,42 @@ export default function ProcessingPanel({
       {/* Options */}
       <div className="space-y-4">
         {/* Send via WhatsApp toggle */}
-        <label className="flex items-center gap-3 cursor-pointer group">
-          <div
-            className={`relative w-11 h-6 rounded-full transition-colors duration-200
-              ${sendWA ? 'bg-violet-600' : 'bg-slate-700'}`}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={sendWA}
+            aria-label="Send via WhatsApp"
             onClick={() => setSendWA(!sendWA)}
+            className="group flex items-center gap-3 -my-2 py-2 rounded-xl cursor-pointer
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400
+                       focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
           >
-            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200
-              ${sendWA ? 'left-6' : 'left-1'}`} />
-          </div>
-          <span className="text-slate-300 group-hover:text-slate-100 transition-colors">
-            Send via WhatsApp
-          </span>
+            <span
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0
+                ${sendWA ? 'bg-violet-600' : 'bg-slate-600'}`}
+            >
+              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200
+                ${sendWA ? 'left-6' : 'left-1'}`} />
+            </span>
+            <span className="text-slate-300 group-hover:text-slate-100 transition-colors">
+              Send via WhatsApp
+            </span>
+          </button>
           {sendWA && !whatsappReady && (
             <span className="badge badge-warning">WhatsApp not connected</span>
           )}
-        </label>
+        </div>
 
         {sendWA && (
           <>
             {/* Randomised delay range */}
             <div>
-              <label className="label flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5" />
+              <span className="label flex items-center gap-1.5" id="delay-label">
+                <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                 Delay Between Messages — random {lo}–{hi}s
-              </label>
-              <div className="flex items-center gap-3">
+              </span>
+              <div className="flex items-center gap-3" role="group" aria-labelledby="delay-label">
                 <input
                   type="number"
                   min={0}
@@ -108,7 +118,7 @@ export default function ProcessingPanel({
                   className="input-field w-24"
                   aria-label="Minimum delay in seconds"
                 />
-                <span className="text-slate-500 text-sm">to</span>
+                <span className="text-slate-400 text-sm">to</span>
                 <input
                   type="number"
                   min={0}
@@ -118,12 +128,12 @@ export default function ProcessingPanel({
                   className="input-field w-24"
                   aria-label="Maximum delay in seconds"
                 />
-                <span className="text-slate-500 text-sm">seconds</span>
+                <span className="text-slate-400 text-sm">seconds</span>
                 {contacts.length > 0 && (
-                  <span className="text-xs text-slate-500 ml-auto">{etaLabel} total</span>
+                  <span className="text-xs text-slate-400 ml-auto">{etaLabel} total</span>
                 )}
               </div>
-              <p className="text-xs text-slate-600 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 Each pause is picked at random from this range — a constant interval
                 is itself a signal WhatsApp's spam detection looks for.
               </p>
@@ -141,17 +151,18 @@ export default function ProcessingPanel({
 
             {/* Resumable run */}
             <div>
-              <label className="label flex items-center gap-1.5">
-                <RotateCcw className="w-3.5 h-3.5" />
+              <label className="label flex items-center gap-1.5" htmlFor="campaign-name">
+                <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                 Campaign Name (optional)
               </label>
               <input
+                id="campaign-name"
                 className="input-field"
                 placeholder="e.g. rosh-hashana-2026"
                 value={runId}
                 onChange={(e) => setRunId(e.target.value)}
               />
-              <p className="text-xs text-slate-600 mt-1">
+              <p className="text-xs text-slate-400 mt-1">
                 Naming a campaign records who was already sent to. If it is
                 interrupted, starting it again with the same name skips them
                 instead of messaging them twice.
@@ -160,8 +171,9 @@ export default function ProcessingPanel({
 
             {/* Caption */}
             <div>
-              <label className="label">Image Caption (optional)</label>
+              <label className="label" htmlFor="caption">Image Caption (optional)</label>
               <input
+                id="caption"
                 className="input-field"
                 placeholder="e.g. Happy New Year! 🎉"
                 value={caption}
@@ -193,7 +205,7 @@ export default function ProcessingPanel({
 
       {/* Validation hints */}
       {!canStart && !isProcessing && (
-        <div className="text-xs text-slate-500 space-y-1">
+        <div className="text-xs text-slate-400 space-y-1">
           {contacts.length === 0 && <p>• No contacts loaded — upload an Excel file first.</p>}
           {!hasImage           && <p>• No template image — upload an image first.</p>}
           {sendWA && !whatsappReady && <p>• WhatsApp not connected — set it up in the previous step.</p>}
@@ -211,9 +223,15 @@ export default function ProcessingPanel({
             <div className="progress-bar h-full" style={{ width: `${progress}%` }} />
           </div>
           <div className="flex gap-4 text-xs">
-            <span className="text-emerald-400">✓ {completed} sent</span>
-            {failed > 0 && <span className="text-red-400">✗ {failed} failed</span>}
-            <span className="text-slate-500 ml-auto">{progress}%</span>
+            <span className="text-emerald-400 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />{completed} sent
+            </span>
+            {failed > 0 && (
+              <span className="text-red-400 flex items-center gap-1">
+                <XCircle className="w-3.5 h-3.5" aria-hidden="true" />{failed} failed
+              </span>
+            )}
+            <span className="text-slate-400 ml-auto">{progress}%</span>
           </div>
         </div>
       )}

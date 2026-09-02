@@ -49,25 +49,34 @@ export default function ExcelUpload({ contacts, excelErrors, onDone }: Props) {
           <FileSpreadsheet className="w-5 h-5 text-violet-400" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-100">Excel Contact List</h3>
-          <p className="text-xs text-slate-500">Column A: Name · Column B: Phone Number</p>
+          <h2 className="font-semibold text-slate-100">Excel Contact List</h2>
+          <p className="text-xs text-slate-400">Column A: Name · Column B: Phone Number</p>
         </div>
       </div>
 
       {/* Drop zone */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={'Upload an Excel file with contacts'}
         className={`drop-zone ${dragging ? 'drop-zone-active' : ''} ${loading ? 'opacity-60 pointer-events-none' : ''}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            inputRef.current?.click()
+          }
+        }}
         onDragOver={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        <Upload className="w-8 h-8 text-slate-500" />
+        <Upload className="w-8 h-8 text-slate-400" aria-hidden="true" />
         <div className="text-center">
           <p className="text-slate-300 font-medium">
             {loading ? 'Uploading…' : 'Drop your Excel file here'}
           </p>
-          <p className="text-slate-500 text-sm mt-1">or click to browse • .xlsx / .xls</p>
+          <p className="text-slate-400 text-sm mt-1">or click to browse • .xlsx / .xls</p>
         </div>
         <input
           ref={inputRef}
@@ -125,21 +134,21 @@ export default function ExcelUpload({ contacts, excelErrors, onDone }: Props) {
               <thead className="bg-slate-800/30 sticky top-0">
                 <tr>
                   <th className="px-4 py-2 text-left text-slate-500 font-medium w-8">#</th>
-                  <th className="px-4 py-2 text-left text-slate-500 font-medium">Name</th>
-                  <th className="px-4 py-2 text-left text-slate-500 font-medium">Phone</th>
+                  <th className="px-4 py-2 text-left text-slate-400 font-medium">Name</th>
+                  <th className="px-4 py-2 text-left text-slate-400 font-medium">Phone</th>
                 </tr>
               </thead>
               <tbody>
                 {contacts.slice(0, 100).map((c, i) => (
                   <tr key={i} className="border-t border-slate-800/50 hover:bg-slate-800/20">
-                    <td className="px-4 py-2 text-slate-600 text-xs">{i + 1}</td>
+                    <td className="px-4 py-2 text-slate-400 text-xs">{i + 1}</td>
                     <td className="px-4 py-2 text-slate-200 font-medium rtl-text">{c.name}</td>
                     <td className="px-4 py-2 text-slate-400 font-mono text-xs">{c.phone}</td>
                   </tr>
                 ))}
                 {contacts.length > 100 && (
                   <tr className="border-t border-slate-800/50">
-                    <td colSpan={3} className="px-4 py-2 text-slate-500 text-xs text-center">
+                    <td colSpan={3} className="px-4 py-2 text-slate-400 text-xs text-center">
                       … and {contacts.length - 100} more
                     </td>
                   </tr>

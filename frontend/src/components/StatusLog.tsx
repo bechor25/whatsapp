@@ -21,11 +21,11 @@ export default function StatusLog({ logs, onClear }: Props) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-slate-500" />
-          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Activity Log</span>
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">Activity Log</span>
         </div>
         {onClear && (
           <button
-            className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-400 transition-colors"
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-100 cursor-pointer transition-colors"
             onClick={onClear}
           >
             <Trash2 className="w-3 h-3" />
@@ -37,7 +37,7 @@ export default function StatusLog({ logs, onClear }: Props) {
       <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 max-h-52 overflow-y-auto font-mono text-xs space-y-1">
         {logs.map((entry, i) => (
           <div key={i} className="flex items-start gap-2">
-            <span className="text-slate-600 shrink-0">{entry.time}</span>
+            <span className="text-slate-400 shrink-0">{entry.time}</span>
             <span className={STATUS_STYLES[entry.status] ?? 'text-slate-300'}>
               {entry.message}
             </span>

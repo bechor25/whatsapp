@@ -8,6 +8,7 @@ import {
   Zap,
   CheckCircle,
   ChevronRight,
+  ChevronLeft,
 } from 'lucide-react'
 
 import ExcelUpload     from './components/ExcelUpload'
@@ -148,7 +149,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="font-bold text-slate-100 text-lg leading-none">WhatsApp Greeting Sender</h1>
-              <p className="text-xs text-slate-500 mt-0.5">Personalised greeting images · Local · Free</p>
+              <p className="text-xs text-slate-400 mt-0.5">Personalised greeting images · Local · Free</p>
             </div>
           </div>
 
@@ -266,10 +267,10 @@ export default function App() {
             onClick={goPrev}
             disabled={!canGoPrev}
           >
-            ← Back
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" />Back
           </button>
 
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-slate-400">
             Step {stepIndex + 1} of {STEPS.length}
           </p>
 
@@ -281,7 +282,7 @@ export default function App() {
                 step === 'upload' && (contacts.length === 0 || image === null)
               }
             >
-              Next →
+              Next<ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           )}
 

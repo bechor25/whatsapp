@@ -118,8 +118,8 @@ export default function PreviewPanel({ image, config, onChange, sampleName = 'ש
             <Eye className="w-5 h-5 text-indigo-400" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-100">Live Preview</h3>
-            <p className="text-xs text-slate-500">
+            <h2 className="font-semibold text-slate-100">Live Preview</h2>
+            <p className="text-xs text-slate-400">
               Drag the name to reposition · actual render is server-generated below
             </p>
           </div>
@@ -135,7 +135,7 @@ export default function PreviewPanel({ image, config, onChange, sampleName = 'ש
       </div>
 
       {!image ? (
-        <div className="flex items-center justify-center h-48 rounded-2xl border-2 border-dashed border-slate-800 text-slate-600">
+        <div className="flex items-center justify-center h-48 rounded-2xl border-2 border-dashed border-slate-800 text-slate-400">
           Upload a template image first
         </div>
       ) : (
@@ -160,7 +160,7 @@ export default function PreviewPanel({ image, config, onChange, sampleName = 'ש
                 </span>
               </div>
             </div>
-            <p className="text-xs text-slate-600 text-center mt-1">
+            <p className="text-xs text-slate-400 text-center mt-1">
               ↑ Drag the name to set position (
               {Math.round(config.xPercent * 100)}%,
               {Math.round(config.yPercent * 100)}%
@@ -171,7 +171,7 @@ export default function PreviewPanel({ image, config, onChange, sampleName = 'ש
           {/* ── Server-rendered preview (actual Pillow output) ── */}
           {serverUrl && (
             <div className="space-y-2">
-              <p className="text-xs text-slate-500 flex items-center gap-1">
+              <p className="text-xs text-slate-400 flex items-center gap-1">
                 <Eye className="w-3.5 h-3.5" />
                 Server-rendered output (Hebrew BiDi applied):
               </p>

@@ -107,8 +107,8 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
           <MessageCircle className="w-5 h-5 text-green-400" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-100">WhatsApp Setup</h3>
-          <p className="text-xs text-slate-500">
+          <h2 className="font-semibold text-slate-100">WhatsApp Setup</h2>
+          <p className="text-xs text-slate-400">
             {isBrowserFlow
               ? 'Opens a browser — scan the QR once, session is saved for future runs'
               : 'Scan the QR once from your phone — session is saved for future runs'}
@@ -135,7 +135,7 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
           <p className={`font-medium text-sm ${loggedIn ? 'text-emerald-300' : initialized ? 'text-amber-300' : 'text-slate-400'}`}>
             {loggedIn ? 'WhatsApp Ready ✓' : initialized ? 'Waiting for QR scan…' : 'Not connected'}
           </p>
-          <p className="text-xs text-slate-500 mt-0.5">{message}</p>
+          <p className="text-xs text-slate-400 mt-0.5">{message}</p>
         </div>
       </div>
 
@@ -149,7 +149,7 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
               WhatsApp → Settings → Linked Devices → <strong>Link a Device</strong>
             </p>
           </div>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-400">
             The code refreshes itself — just scan whatever is shown
           </p>
         </div>

@@ -53,40 +53,57 @@
   .btn-primary {
     @apply bg-violet-600 hover:bg-violet-500 text-white font-semibold px-5 py-2.5 rounded-xl
            transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
-           flex items-center gap-2 justify-center;
+           flex items-center gap-2 justify-center min-h-[44px] cursor-pointer
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400
+           focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900;
   }
 
   .btn-secondary {
     @apply bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-5 py-2.5 rounded-xl
            transition-all duration-200 border border-slate-700
-           flex items-center gap-2 justify-center;
+           flex items-center gap-2 justify-center min-h-[44px] cursor-pointer
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400
+           focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900;
   }
 
   .btn-success {
     @apply bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-5 py-2.5 rounded-xl
            transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
-           flex items-center gap-2 justify-center;
+           flex items-center gap-2 justify-center min-h-[44px] cursor-pointer
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300
+           focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900;
   }
 
   .btn-danger {
     @apply bg-red-600 hover:bg-red-500 text-white font-semibold px-5 py-2.5 rounded-xl
-           transition-all duration-200 flex items-center gap-2 justify-center;
+           transition-all duration-200 flex items-center gap-2 justify-center
+           min-h-[44px] cursor-pointer
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300
+           focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900;
   }
 
   .input-field {
     @apply bg-slate-800 border border-slate-700 text-slate-100 rounded-xl px-4 py-2.5
-           focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent
-           placeholder-slate-500 transition-all duration-200 w-full;
+           focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent
+           placeholder-slate-400 transition-all duration-200 w-full min-h-[44px];
   }
 
   .label {
-    @apply block text-sm font-medium text-slate-400 mb-1.5;
+    @apply block text-sm font-medium text-slate-300 mb-1.5;
+  }
+
+  /* Secondary/helper copy. slate-500 measures 3.75:1 and slate-600 only 2.36:1
+     on these surfaces — both fail WCAG AA for text. slate-400 is 6.96:1. */
+  .text-muted {
+    @apply text-slate-400;
   }
 
   .drop-zone {
     @apply border-2 border-dashed border-slate-700 rounded-2xl p-8 flex flex-col items-center justify-center
            gap-3 cursor-pointer transition-all duration-200
-           hover:border-violet-500 hover:bg-violet-950/20;
+           hover:border-violet-500 hover:bg-violet-950/20
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400
+           focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900;
   }
 
   .drop-zone-active {
@@ -95,7 +112,9 @@
 
   .step-tab {
     @apply flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm
-           transition-all duration-200 cursor-pointer border border-transparent;
+           transition-all duration-200 cursor-pointer border border-transparent min-h-[44px]
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400
+           focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900;
   }
 
   .step-tab-active {
@@ -107,7 +126,7 @@
   }
 
   .step-tab-inactive {
-    @apply text-slate-500 cursor-not-allowed;
+    @apply text-slate-400 cursor-not-allowed;
   }
 
   .badge {
@@ -155,6 +174,19 @@
   background: linear-gradient(90deg, #7c3aed, #3b82f6);
   border-radius: 9999px;
   transition: width 0.4s ease;
+}
+
+/* Respect the OS "reduce motion" setting: keep state changes instant rather
+   than animated, but never hide content that only appears via animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* RTL text for Hebrew preview */

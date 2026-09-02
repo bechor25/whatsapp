@@ -48,25 +48,34 @@ export default function ImageUpload({ image, onDone }: Props) {
           <ImageIcon className="w-5 h-5 text-blue-400" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-100">Template Image</h3>
-          <p className="text-xs text-slate-500">Greeting card that will be personalised per contact</p>
+          <h2 className="font-semibold text-slate-100">Template Image</h2>
+          <p className="text-xs text-slate-400">Greeting card that will be personalised per contact</p>
         </div>
       </div>
 
       {/* Drop zone */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={'Upload a template image'}
         className={`drop-zone ${dragging ? 'drop-zone-active' : ''} ${loading ? 'opacity-60 pointer-events-none' : ''}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            inputRef.current?.click()
+          }
+        }}
         onDragOver={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        <Upload className="w-8 h-8 text-slate-500" />
+        <Upload className="w-8 h-8 text-slate-400" aria-hidden="true" />
         <div className="text-center">
           <p className="text-slate-300 font-medium">
             {loading ? 'Uploading…' : 'Drop your template image here'}
           </p>
-          <p className="text-slate-500 text-sm mt-1">or click to browse • PNG / JPG / BMP / WebP</p>
+          <p className="text-slate-400 text-sm mt-1">or click to browse • PNG / JPG / BMP / WebP</p>
         </div>
         <input
           ref={inputRef}
