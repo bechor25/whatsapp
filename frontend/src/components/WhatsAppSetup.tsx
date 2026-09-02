@@ -12,6 +12,9 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
   const [message,     setMessage]     = useState('WhatsApp Web not started yet.')
   const [loading,     setLoading]     = useState(false)
   const [polling,     setPolling]     = useState(false)
+  // Set by the neonize transport, which pairs via a QR rendered in this page
+  // rather than in a browser window it controls.
+  const [qrUrl,       setQrUrl]       = useState<string | null>(null)
 
   /* ── Poll status every 3 s once browser is up ──────────────────────── */
   useEffect(() => {
@@ -21,9 +24,11 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
       try {
         const { data } = await axios.get('/api/whatsapp/status')
         setMessage(data.message)
+        setQrUrl(data.qr_url ?? null)
         if (data.logged_in) {
           setLoggedIn(true)
           setPolling(false)
+          setQrUrl(null)
           onStatusChange(true)
           clearInterval(id)
         }
@@ -34,7 +39,8 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
 
   const handleInit = async () => {
     setLoading(true)
-    setMessage('Launching browser…')
+    setQrUrl(null)
+    setMessage('Connecting…')
     try {
       const { data } = await axios.post('/api/whatsapp/init')
       setMessage(data.message)
@@ -55,9 +61,11 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
     try {
       const { data } = await axios.get('/api/whatsapp/status')
       setMessage(data.message)
+      setQrUrl(data.qr_url ?? null)
       if (data.logged_in) {
         setLoggedIn(true)
         setPolling(false)
+        setQrUrl(null)
         onStatusChange(true)
       }
     } catch { /* ignore */ }
@@ -99,6 +107,16 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
           <p className="text-xs text-slate-500 mt-0.5">{message}</p>
         </div>
       </div>
+
+      {/* Pairing QR (neonize transport) */}
+      {!loggedIn && qrUrl && (
+        <div className="p-4 bg-white rounded-2xl border border-slate-700 flex flex-col items-center gap-3">
+          <img src={qrUrl} alt="WhatsApp pairing QR code" className="w-56 h-56" />
+          <p className="text-xs text-slate-600 text-center max-w-xs">
+            WhatsApp on your phone → Settings → Linked Devices → Link a Device
+          </p>
+        </div>
+      )}
 
       {/* How it works */}
       {!initialized && (

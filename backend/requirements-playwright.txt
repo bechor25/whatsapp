@@ -1,0 +1,6 @@
+# Legacy WhatsApp Web transport (WHATSAPP_TRANSPORT=playwright).
+# Not needed for the default neonize transport, and 135 MB of the image —
+# so the container never installs it.
+#   pip install -r requirements-playwright.txt && playwright install chromium
+-r requirements.txt
+playwright>=1.47.0

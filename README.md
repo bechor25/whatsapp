@@ -27,13 +27,68 @@ A **free, fully local** application that generates personalised Hebrew greeting 
 
 ---
 
-## Requirements
+## Transports
+
+The WhatsApp connection is pluggable, chosen with `WHATSAPP_TRANSPORT`:
+
+| | `neonize` (default) | `playwright` (legacy) |
+|---|---|---|
+| How | WhatsApp multi-device protocol over WebSocket | Automates WhatsApp Web in Chromium |
+| Browser | none | Chromium (~500 MB RAM) |
+| Breaks when | the protocol changes (rare) | WhatsApp changes its UI (often) |
+| Per message | sub-second | ~25 s |
+| Runs in Docker | yes | no (needs a visible window for the QR) |
+
+Both link a personal account as a paired device, so **both carry the same
+account ban risk**. neonize is faster and far more stable — it is not "safer".
+
+---
+
+## Quick Start (Docker) — recommended
+
+No Python, no Node, no installs.
+
+```bash
+docker run -d --name whatsapp-greeter \
+  -p 8000:8000 \
+  -v wa-data:/data \
+  <your-dockerhub-user>/whatsapp-greeting-sender:latest
+```
+
+Open **http://localhost:8000**, click *Initialize WhatsApp*, scan the QR shown
+in the page (phone → Settings → Linked Devices → Link a Device).
+
+Or with compose:
+
+```bash
+docker compose up -d
+```
+
+**The `/data` volume is not optional.** It holds the WhatsApp pairing, generated
+images, uploads and the resume log. Delete it and you re-scan the QR.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `WHATSAPP_TRANSPORT` | `neonize` | `neonize` or `playwright` |
+| `DEFAULT_COUNTRY_CODE` | `972` | Applied to local numbers with no country code (44 UK, 1 US/CA…) |
+
+### Publishing to Docker Hub
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t <your-dockerhub-user>/whatsapp-greeting-sender:latest --push .
+```
+
+---
+
+## Requirements (running from source)
 
 | Software | Minimum version |
 |---|---|
-| Python | 3.10+ |
+| Python | 3.10 – 3.12 |
 | Node.js | 18+ |
-| Chrome/Chromium | any (Playwright downloads one) |
+| libmagic | for the `neonize` transport (`brew install libmagic` / `apt install libmagic1`) |
+| Chrome/Chromium | only for `WHATSAPP_TRANSPORT=playwright` |
 
 ---
 
@@ -109,16 +164,30 @@ To add fonts manually:
 - The server generates an actual Pillow-rendered preview to confirm output
 
 ### Step 3 — WhatsApp Setup
-- Click **Launch WhatsApp Browser** — a Chrome window opens
-- Scan the QR code with your phone's WhatsApp app
-- Session is saved in `backend/whatsapp_session/` — no re-scan needed next time
+- Click **Initialize WhatsApp**
+- **neonize**: a QR code appears in the page — scan it from your phone
+  (Settings → Linked Devices → Link a Device). Session is stored in
+  `backend/whatsapp_session_neonize/`.
+- **playwright**: a Chrome window opens; scan the QR there. Session is stored in
+  `backend/whatsapp_session/`.
 
 ### Step 4 — Send
 - Toggle **Send via WhatsApp Web** on/off
-- Set a delay between messages (3–5 s recommended to avoid blocking)
 - Add an optional image caption
 - Click **Send to N Contacts**
 - Watch real-time progress, logs, and thumbnail results
+
+#### Sending safely at volume
+
+WhatsApp's spam detection, not this app, is what limits throughput. For a real
+campaign (hundreds of recipients) set `delay_seconds` **and** `delay_max_seconds`
+so each pause is randomised — a constant interval is itself a detection signal.
+A commonly cited safe band is 30–90 s, under ~30 messages/hour, spread across
+2–3 days rather than one burst.
+
+Pass a `run_id` to make a campaign resumable: progress is written to
+`backend/runs/<run_id>.json` after every delivery, and re-starting the same
+`run_id` skips everyone already sent instead of messaging them twice.
 
 ---
 
@@ -143,12 +212,16 @@ whatsapp/
 │   ├── services/
 │   │   ├── excel_service.py      # Excel parsing + phone validation
 │   │   ├── image_service.py      # Pillow image generation + Hebrew BiDi
-│   │   └── whatsapp_service.py   # Playwright WhatsApp Web automation
+│   │   ├── whatsapp_service.py   # Playwright WhatsApp Web automation (legacy)
+│   │   └── whatsapp_neonize.py   # neonize protocol transport (default)
 │   ├── fonts/                    # Place Hebrew .ttf fonts here
 │   ├── uploads/                  # Uploaded Excel & template images
 │   ├── outputs/                  # Generated greeting images
 │   ├── whatsapp_session/         # Playwright persistent browser session
-│   └── requirements.txt
+│   ├── whatsapp_session_neonize/ # neonize SQLite session
+│   ├── runs/                     # Per-campaign resume logs
+│   ├── requirements.txt
+│   └── requirements-playwright.txt  # legacy transport extras
 │
 ├── frontend/
 │   ├── src/
@@ -168,6 +241,8 @@ whatsapp/
 │   ├── package.json
 │   └── vite.config.ts
 │
+├── Dockerfile                    # Single self-contained image (API + SPA)
+├── docker-compose.yml
 ├── start.bat                     # Windows one-click launcher
 ├── start.sh                      # macOS/Linux one-click launcher
 └── README.md
@@ -183,8 +258,9 @@ whatsapp/
 | `POST` | `/api/upload-image` | Upload template image |
 | `POST` | `/api/preview` | Generate preview image |
 | `GET`  | `/api/fonts` | List available fonts |
-| `POST` | `/api/whatsapp/init` | Launch WhatsApp browser |
-| `GET`  | `/api/whatsapp/status` | Check login status |
+| `POST` | `/api/whatsapp/init` | Connect WhatsApp (or restart pairing) |
+| `GET`  | `/api/whatsapp/status` | Login status; returns `qr_url` while pairing |
+| `GET`  | `/api/health` | Liveness probe |
 | `POST` | `/api/process/start` | Start processing contacts |
 | `POST` | `/api/process/stop` | Stop processing |
 | `GET`  | `/api/process/status` | Current processing state |

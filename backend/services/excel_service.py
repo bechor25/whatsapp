@@ -1,3 +1,4 @@
+import os
 import re
 from typing import List, Dict, Tuple, Optional
 
@@ -94,16 +95,18 @@ class ExcelService:
         # Remove formatting characters
         digits = re.sub(r"[\s\-\(\)\+\.]", "", cleaned)
 
-        # Israeli local → international
+        # Local → international. DEFAULT_COUNTRY_CODE makes this portable to
+        # any country (972 = Israel, 44 = UK, 1 = US/CA, …).
+        cc = os.getenv("DEFAULT_COUNTRY_CODE", "972").lstrip("+")
         if re.match(r"^0[0-9]{9}$", digits):
-            # 0542160685 → 972542160685
-            digits = "972" + digits[1:]
-        elif re.match(r"^[5][0-9]{8}$", digits):
-            # 542160685 (9 digits, local without leading 0) → 972542160685
-            digits = "972" + digits
-        elif re.match(r"^972[0-9]{9}$", digits):
+            # National format with trunk 0:  0XX-XXXXXXX → <cc>XXXXXXXXX
+            digits = cc + digits[1:]
+        elif re.match(r"^[1-9][0-9]{8}$", digits):
+            # Bare 9-digit subscriber number, no trunk 0 and no country code
+            digits = cc + digits
+        elif digits.startswith(cc):
             pass  # already international
-        elif re.match(r"^\+972", phone):
+        elif phone.strip().startswith("+"):
             digits = re.sub(r"[^\d]", "", phone)
 
         # Validate with the phonenumbers library
@@ -119,13 +122,18 @@ class ExcelService:
             pass
 
         # phonenumbers rejected the number — don't silently accept it.
-        # An Israeli mobile number must be 9 local digits (05x-xxxxxxx → 972xxxxxxxxx = 12 digits).
-        # Any raw input under 10 digits cannot be a valid full phone number.
+        # A full international number is at least 10 digits; anything shorter
+        # cannot be valid regardless of country.
         if len(digits) < 10:
             return None, f"Row {row_num}: Phone number '{phone}' is too short to be valid (got {len(digits)} digits, need at least 10)."
 
-        # Loose fallback for international numbers not covered by phonenumbers: accept 10-15 digits
-        if 10 <= len(digits) <= 15:
+        # Loose fallback for international numbers phonenumbers doesn't know.
+        # It must still LOOK like an international number, or malformed input
+        # sails through unnormalized and fails later at send time instead of here:
+        #   - digits only (a stray letter must not survive)
+        #   - no leading 0 (that means normalization above did not match, e.g. an
+        #     11-digit "0XX-XXXXXXXX" with one digit too many)
+        if 10 <= len(digits) <= 15 and digits.isdigit() and not digits.startswith("0"):
             return digits, None
 
         return None, f"Row {row_num}: Invalid phone number '{phone}'."

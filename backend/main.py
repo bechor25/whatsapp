@@ -1,10 +1,12 @@
 import asyncio
+import json
 import os
+import random
 import sys
 import shutil
 import uuid
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 # ── Windows event-loop fix ────────────────────────────────────────────────────
 # uvicorn on Windows defaults to SelectorEventLoop which does NOT support
@@ -22,16 +24,22 @@ from PIL import Image
 from models.schemas import PreviewRequest, ProcessRequest, TextConfig
 from services.excel_service import ExcelService
 from services.image_service import ImageService
-from services.whatsapp_service import WhatsAppService
 
 # ── Directories ───────────────────────────────────────────────────────────────
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "outputs"
 FONTS_DIR  = "fonts"
-SESSION_DIR = "whatsapp_session"
+SESSION_DIR = "whatsapp_session"                  # Playwright Chromium profile
+NEONIZE_SESSION_DIR = "whatsapp_session_neonize"  # neonize SQLite session
+RUNS_DIR = "runs"                                 # per-campaign progress, for resume
 
-for _d in (UPLOAD_DIR, OUTPUT_DIR, FONTS_DIR, SESSION_DIR):
+for _d in (UPLOAD_DIR, OUTPUT_DIR, FONTS_DIR, SESSION_DIR, NEONIZE_SESSION_DIR, RUNS_DIR):
     os.makedirs(_d, exist_ok=True)
+
+# ── Transport selection ───────────────────────────────────────────────────────
+# WHATSAPP_TRANSPORT=neonize    → protocol library, no browser (fast, stable)
+# WHATSAPP_TRANSPORT=playwright → WhatsApp Web via Chromium (default, legacy)
+WHATSAPP_TRANSPORT = os.getenv("WHATSAPP_TRANSPORT", "playwright").strip().lower()
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(title="WhatsApp Greeting Sender", version="1.0.0")
@@ -54,7 +62,13 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR),  name="uploads")
 # ── Services ──────────────────────────────────────────────────────────────────
 excel_service    = ExcelService()
 image_service    = ImageService(FONTS_DIR)
-whatsapp_service = WhatsAppService(SESSION_DIR)
+
+if WHATSAPP_TRANSPORT == "neonize":
+    from services.whatsapp_neonize import WhatsAppNeonizeService
+    whatsapp_service = WhatsAppNeonizeService(NEONIZE_SESSION_DIR, OUTPUT_DIR)
+else:
+    from services.whatsapp_service import WhatsAppService
+    whatsapp_service = WhatsAppService(SESSION_DIR)
 
 # ── Processing state ──────────────────────────────────────────────────────────
 class _State:
@@ -208,7 +222,7 @@ async def whatsapp_status():
 
 
 @app.get("/api/whatsapp/debug-dom")
-async def debug_dom(phone: str = "972542160685"):
+async def debug_dom(phone: str):
     """Navigate to a chat and dump all interactive elements — helps diagnose UI changes."""
     page = whatsapp_service._page
     if not page:
@@ -288,16 +302,54 @@ async def ws_progress(ws: WebSocket):
         manager.disconnect(ws)
 
 
+# ── Run persistence (resume after a crash) ────────────────────────────────────
+
+def _run_file(run_id: str) -> str:
+    # run_id lands in a path, so keep it to characters that cannot escape RUNS_DIR.
+    safe = "".join(c for c in run_id if c.isalnum() or c in "-_")[:64]
+    return os.path.join(RUNS_DIR, f"{safe or 'run'}.json")
+
+
+def _load_sent(run_id: Optional[str]) -> set:
+    """Phones already delivered in a previous attempt at this run."""
+    if not run_id:
+        return set()
+    try:
+        with open(_run_file(run_id), encoding="utf-8") as f:
+            return set(json.load(f).get("sent", []))
+    except (FileNotFoundError, ValueError):
+        return set()
+
+
+def _record_sent(run_id: Optional[str], phone: str, sent: set):
+    if not run_id:
+        return
+    sent.add(phone)
+    tmp = _run_file(run_id) + ".tmp"
+    # Write-then-rename: a crash mid-write must not corrupt the resume log.
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"run_id": run_id, "sent": sorted(sent)}, f, ensure_ascii=False)
+    os.replace(tmp, _run_file(run_id))
+
+
 # ── Background processing ─────────────────────────────────────────────────────
 
 async def _run(req: ProcessRequest):
     state.is_processing  = True
-    state.total          = len(req.contacts)
     state.stop_requested = False
+
+    already_sent = _load_sent(req.run_id)
+    contacts = [c for c in req.contacts if c.phone not in already_sent]
+    skipped  = len(req.contacts) - len(contacts)
+
+    state.total = len(contacts)
+
+    if skipped:
+        _log(state, f"Resuming run '{req.run_id}': skipping {skipped} already sent.", "info")
 
     await manager.broadcast({"type": "start", "data": state.to_dict()})
 
-    for i, contact in enumerate(req.contacts):
+    for i, contact in enumerate(contacts):
         if state.stop_requested:
             _log(state, "Processing stopped by user.", "warning")
             break
@@ -339,6 +391,7 @@ async def _run(req: ProcessRequest):
                 )
                 result["status"] = "sent"
                 state.completed += 1
+                _record_sent(req.run_id, phone, already_sent)
                 _log(state, f"✓ Sent to {name} ({phone})", "success")
             else:
                 result["status"] = "generated"
@@ -353,11 +406,18 @@ async def _run(req: ProcessRequest):
 
         await manager.broadcast({"type": "update", "data": state.to_dict()})
 
-        # Configurable delay between sends
-        if req.send_whatsapp and req.delay_seconds > 0 and i < len(req.contacts) - 1:
-            state.current = f"Waiting {req.delay_seconds}s before next message…"
-            await manager.broadcast({"type": "update", "data": state.to_dict()})
-            await asyncio.sleep(req.delay_seconds)
+        # Delay between sends. Randomised when a range is given — a constant
+        # interval is itself an automation signal to WhatsApp's spam detection.
+        if req.send_whatsapp and i < len(contacts) - 1:
+            low  = req.delay_seconds
+            high = req.delay_max_seconds if req.delay_max_seconds is not None else low
+            if high < low:
+                low, high = high, low
+            wait = random.uniform(low, high) if high > low else low
+            if wait > 0:
+                state.current = f"Waiting {wait:.0f}s before next message…"
+                await manager.broadcast({"type": "update", "data": state.to_dict()})
+                await asyncio.sleep(wait)
 
     state.is_processing = False
     state.current       = "Done ✓"
@@ -372,3 +432,11 @@ def _log(s: _State, message: str, status: str):
             "status":  status,
         }
     )
+
+
+# ── Frontend (container build) ────────────────────────────────────────────────
+# Mounted LAST so it never shadows /api, /ws, /outputs or /uploads.
+# Absent in local dev, where Vite serves the SPA on :5173 and proxies to here.
+FRONTEND_DIST = os.getenv("FRONTEND_DIST", "static")
+if os.path.isdir(FRONTEND_DIST):
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")

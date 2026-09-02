@@ -1,0 +1,26 @@
+# Build context hygiene — keep local state and secrets out of the image.
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+
+# Local dev state — must never be baked in, especially the WhatsApp session
+backend/venv/
+backend/whatsapp_session/
+backend/whatsapp_session_neonize/
+backend/outputs/
+backend/uploads/
+backend/runs/
+backend/fonts/
+
+frontend/node_modules/
+frontend/dist/
+
+# Local test data (real phone numbers)
+test/
+*.xlsx
+
+README.md
+start.sh
+start.bat

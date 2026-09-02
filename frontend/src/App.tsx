@@ -20,6 +20,10 @@ import ResultsPanel    from './components/ResultsPanel'
 import StatusLog       from './components/StatusLog'
 import { useWebSocket }from './hooks/useWebSocket'
 
+// Same-origin WebSocket: works behind the Vite dev proxy and when FastAPI
+// serves the built SPA itself (container), on any host or port.
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/progress`
+
 import type {
   AppStep,
   Contact,
@@ -71,7 +75,7 @@ export default function App() {
   const [procState,    setProcState]    = useState<ProcessingState>(DEFAULT_STATE)
 
   /* ── WebSocket for real-time updates ─────────────────────────────────── */
-  useWebSocket('ws://localhost:8000/ws/progress', useCallback((msg) => {
+  useWebSocket(WS_URL, useCallback((msg) => {
     if (msg.type === 'heartbeat') return
     if (msg.data) {
       const d = msg.data as ProcessingState

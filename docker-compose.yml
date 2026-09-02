@@ -1,0 +1,22 @@
+services:
+  app:
+    # Swap for your published image to run without building:
+    #   image: <your-dockerhub-user>/whatsapp-greeting-sender:latest
+    build: .
+    image: whatsapp-greeting-sender:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # neonize = protocol library, no browser. The only transport that works
+      # in a container; playwright needs Chromium and a visible window for QR.
+      WHATSAPP_TRANSPORT: neonize
+      # Country code applied to local numbers that lack one (972 IL, 44 UK, 1 US).
+      DEFAULT_COUNTRY_CODE: "972"
+    volumes:
+      # One volume holds the WhatsApp pairing, generated images, uploads and the
+      # resume log. Drop it and you re-scan the QR.
+      - wa-data:/data
+    restart: unless-stopped
+
+volumes:
+  wa-data:
