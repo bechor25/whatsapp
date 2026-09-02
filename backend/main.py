@@ -245,6 +245,15 @@ async def debug_dom(phone: str = "972542160685"):
         raise HTTPException(500, str(e))
 
 
+@app.get("/api/whatsapp/debug-dump")
+async def debug_dump(tag: str = "wa_dump"):
+    """Dump the CURRENT page (no navigation) to outputs/<tag>.png + <tag>_dom.json."""
+    if not whatsapp_service._page:
+        raise HTTPException(400, "WhatsApp not initialized")
+    await whatsapp_service._dump_debug(tag)
+    return {"success": True, "tag": tag}
+
+
 @app.post("/api/process/start")
 async def start_processing(req: ProcessRequest, bg: BackgroundTasks):
     if state.is_processing:

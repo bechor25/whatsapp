@@ -250,20 +250,18 @@ class WhatsAppService:
             raise RuntimeError("Could not attach image file. Screenshot saved to outputs/wa_debug.png")
 
         # ── Wait for the media preview to actually open ───────────────────────
-        # STRICT selector: requires BOTH aria-label="שליחה" AND the send icon as a
-        # direct descendant (:has). This avoids false-matching the "עדכן את WhatsApp"
-        # update notification or any other element that only partially matches.
-        MEDIA_PREVIEW_SEND_SEL = '[aria-label="שליחה"]:has([data-icon="wds-ic-send-filled"])'
+        # STRICT selector: a role="button" containing the media-preview send icon.
+        # Anchored on the ICON, not on aria-label — WhatsApp renamed that label
+        # (was "שליחה", DOM-verified 2026-09: "שליחת הפריט שנבחר"), and the icon is
+        # the only element of its kind on the page, so this cannot false-match the
+        # "עדכן את WhatsApp" update notification.
+        MEDIA_PREVIEW_SEND_SEL = 'div[role="button"]:has([data-icon="wds-ic-send-filled"])'
         try:
             await self._page.wait_for_selector(
                 MEDIA_PREVIEW_SEND_SEL, state="visible", timeout=15000
             )
         except Exception:
-            try:
-                ss_dir = os.path.join(os.path.dirname(self.session_dir), "outputs")
-                await self._page.screenshot(path=os.path.join(ss_dir, "wa_nopreview.png"))
-            except Exception:
-                pass
+            await self._dump_debug("wa_nopreview")
             raise RuntimeError(
                 f"Media preview did not open for {phone}. "
                 "The image was not attached (screenshot saved to outputs/wa_nopreview.png)."
@@ -311,20 +309,12 @@ class WhatsAppService:
         # identifier and cannot be confused with the update-notification button.
         sent = await self._page.evaluate("""
 () => {
-    // Primary: שליחה element that contains the specific media-preview send icon
-    for (const el of document.querySelectorAll('[aria-label="\u05e9\u05dc\u05d9\u05d7\u05d4"]')) {
-        if (!el.querySelector('[data-icon="wds-ic-send-filled"]')) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width > 0 && r.height > 0 && el.offsetParent !== null) {
-            el.click();
-            return true;
-        }
-    }
-    // Fallback: climb up from the icon itself
+    // Climb from the media-preview send icon to its clickable ancestor.
+    // No aria-label literal: WhatsApp localises and renames those.
     for (const icon of document.querySelectorAll('[data-icon="wds-ic-send-filled"]')) {
-        const t = icon.closest('[aria-label]') ||
+        const t = icon.closest('div[role="button"]') ||
                   icon.closest('button') ||
-                  icon.closest('div[role="button"]') ||
+                  icon.closest('[aria-label]') ||
                   icon.parentElement;
         if (!t) continue;
         const r = t.getBoundingClientRect();
@@ -339,7 +329,9 @@ class WhatsAppService:
         if not sent:
             # Playwright-level fallback using the same strict :has() selector
             sent = await self._click_first_visible([
-                '[aria-label="שליחה"]:has([data-icon="wds-ic-send-filled"])',
+                MEDIA_PREVIEW_SEND_SEL,
+                '[aria-label="שליחת הפריט שנבחר"]',
+                '[aria-label="שליחה"]:has([data-icon])',
                 '[aria-label="שלח"]:has([data-icon])',
                 '[aria-label="Send"]:has([data-icon])',
                 'button[data-testid="send"]',
@@ -432,29 +424,57 @@ class WhatsAppService:
 
         await asyncio.sleep(0.5)
 
-        # ── Step 3: verify a delivery indicator exists (best-effort) ────────────
-        # data-icon="msg-time" / "msg-check" / "msg-dblcheck" = sent / delivered / read
-        # WhatsApp Web 2026 has NO data-testid on message container elements, so we
-        # cannot scope to "last message row". Instead we verify that at least one
-        # such icon is visible anywhere in the chat — if zero exist the send likely
-        # failed. Steps 1 & 2 are the primary guards; this is a secondary check only.
+        # ── Step 3: look for a delivery indicator (diagnostic only) ────────────
+        # Steps 1 & 2 are the guards: the media preview closed and the chat compose
+        # box came back, which only happens once WhatsApp has dispatched the media.
+        #
+        # This step must NEVER fail the send. WhatsApp Web dropped the
+        # data-icon="msg-time"/"msg-check"/"msg-dblcheck" markup entirely; the status
+        # is now a bare localized span (Hebrew: aria-label=" נקראה "), so any selector
+        # here is language- and version-dependent and will go stale again.
         try:
-            indicator_visible = await self._page.locator(
-                '[data-icon="msg-time"], [data-icon="msg-check"], [data-icon="msg-dblcheck"]'
+            self._last_delivery_indicator = await self._page.locator(
+                '[data-icon="msg-time"], [data-icon="msg-check"], [data-icon="msg-dblcheck"], '
+                '[aria-label*="נקרא"], [aria-label*="נמסר"], [aria-label*="נשלח"]'
             ).last.is_visible()
-            if not indicator_visible:
-                raise RuntimeError(
-                    f"No delivery indicator found after sending to {phone}. "
-                    "The message was NOT sent."
-                )
-        except RuntimeError:
-            raise
         except Exception:
-            pass  # best-effort; steps 1 & 2 are the primary guards
+            self._last_delivery_indicator = None
 
         return True
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    async def _dump_debug(self, tag: str):
+        """Screenshot + dump every interactive element to outputs/<tag>.png/.json."""
+        ss_dir = os.path.join(os.path.dirname(self.session_dir), "outputs")
+        try:
+            os.makedirs(ss_dir, exist_ok=True)
+            await self._page.screenshot(path=os.path.join(ss_dir, f"{tag}.png"))
+        except Exception:
+            pass
+        try:
+            elements = await self._page.evaluate("""() => {
+                const res = [];
+                document.querySelectorAll("button,[role=button],[aria-label],[data-icon]").forEach(el => {
+                    const aria = el.getAttribute("aria-label");
+                    const testid = el.getAttribute("data-testid");
+                    const own = el.getAttribute("data-icon");
+                    const inner = el.querySelector("[data-icon]")?.getAttribute("data-icon");
+                    if (!aria && !testid && !own && !inner) return;
+                    const r = el.getBoundingClientRect();
+                    res.push({tag: el.tagName, role: el.getAttribute("role"), aria, testid,
+                              icon: own, innerIcon: inner,
+                              visible: r.width > 0 && r.height > 0 && el.offsetParent !== null,
+                              rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)],
+                              text: el.innerText?.trim().slice(0, 40)});
+                });
+                return res;
+            }""")
+            import json as _json
+            with open(os.path.join(ss_dir, f"{tag}_dom.json"), "w", encoding="utf-8") as f:
+                _json.dump(elements, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
     async def _click_first_visible(self, selectors: list) -> bool:
         for sel in selectors:
