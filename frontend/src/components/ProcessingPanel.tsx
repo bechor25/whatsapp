@@ -1,4 +1,4 @@
-import { Play, StopCircle, Clock, Users, MessageCircle, Image as ImageIcon } from 'lucide-react'
+import { Play, StopCircle, Clock, Users, MessageCircle, Image as ImageIcon, RotateCcw, AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import type { Contact, ProcessingState } from '../types'
 
@@ -7,7 +7,7 @@ interface Props {
   hasImage:        boolean
   whatsappReady:   boolean
   processingState: ProcessingState
-  onStart:         (sendWA: boolean, delay: number, caption: string) => void
+  onStart:         (sendWA: boolean, delayMin: number, delayMax: number, caption: string, runId: string) => void
   onStop:          () => void
 }
 
@@ -20,12 +20,26 @@ export default function ProcessingPanel({
   onStop,
 }: Props) {
   const [sendWA,   setSendWA]   = useState(true)
-  const [delay,    setDelay]    = useState(3)
+  // A range, not a constant: every pause is drawn randomly from it, because a
+  // fixed interval is itself something WhatsApp's spam detection looks for.
+  const [delayMin, setDelayMin] = useState(30)
+  const [delayMax, setDelayMax] = useState(90)
   const [caption,  setCaption]  = useState('')
+  const [runId,    setRunId]    = useState('')
 
   const { isProcessing, total, completed, failed, current } = processingState
   const progress = total > 0 ? Math.round((completed + failed) / total * 100) : 0
   const canStart = contacts.length > 0 && hasImage && (!sendWA || whatsappReady) && !isProcessing
+
+  const lo = Math.min(delayMin, delayMax)
+  const hi = Math.max(delayMin, delayMax)
+  // Rough wall-clock for the whole run, at the average of the chosen range.
+  const etaMinutes = Math.round(contacts.length * ((lo + hi) / 2) / 60)
+  const etaLabel = etaMinutes >= 60
+    ? `~${(etaMinutes / 60).toFixed(1)} hours`
+    : `~${etaMinutes} min`
+  // Under ~30s average with a real list is where accounts start getting flagged.
+  const tooFast = sendWA && contacts.length > 20 && (lo + hi) / 2 < 30
 
   return (
     <div className="space-y-5">
@@ -69,7 +83,7 @@ export default function ProcessingPanel({
               ${sendWA ? 'left-6' : 'left-1'}`} />
           </div>
           <span className="text-slate-300 group-hover:text-slate-100 transition-colors">
-            Send via WhatsApp Web
+            Send via WhatsApp
           </span>
           {sendWA && !whatsappReady && (
             <span className="badge badge-warning">WhatsApp not connected</span>
@@ -78,33 +92,69 @@ export default function ProcessingPanel({
 
         {sendWA && (
           <>
-            {/* Delay */}
+            {/* Randomised delay range */}
             <div>
               <label className="label flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
-                Delay Between Messages — {delay}s
+                Delay Between Messages — random {lo}–{hi}s
               </label>
               <div className="flex items-center gap-3">
                 <input
-                  type="range"
+                  type="number"
                   min={0}
-                  max={30}
-                  step={1}
-                  value={delay}
-                  onChange={(e) => setDelay(Number(e.target.value))}
-                  className="flex-1 accent-violet-500"
+                  max={600}
+                  value={delayMin}
+                  onChange={(e) => setDelayMin(Number(e.target.value))}
+                  className="input-field w-24"
+                  aria-label="Minimum delay in seconds"
                 />
+                <span className="text-slate-500 text-sm">to</span>
                 <input
                   type="number"
                   min={0}
-                  max={60}
-                  value={delay}
-                  onChange={(e) => setDelay(Number(e.target.value))}
-                  className="input-field w-20"
+                  max={600}
+                  value={delayMax}
+                  onChange={(e) => setDelayMax(Number(e.target.value))}
+                  className="input-field w-24"
+                  aria-label="Maximum delay in seconds"
                 />
+                <span className="text-slate-500 text-sm">seconds</span>
+                {contacts.length > 0 && (
+                  <span className="text-xs text-slate-500 ml-auto">{etaLabel} total</span>
+                )}
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                Higher delays reduce the risk of WhatsApp blocking your number.
+                Each pause is picked at random from this range — a constant interval
+                is itself a signal WhatsApp's spam detection looks for.
+              </p>
+              {tooFast && (
+                <div className="mt-2 flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-amber-300">
+                    Under 30s average across {contacts.length} contacts is a common
+                    trigger for account blocks. 30–90s is the usual safe band, and
+                    large lists are safer split over several days.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Resumable run */}
+            <div>
+              <label className="label flex items-center gap-1.5">
+                <RotateCcw className="w-3.5 h-3.5" />
+                Campaign Name (optional)
+              </label>
+              <input
+                className="input-field"
+                placeholder="e.g. rosh-hashana-2026"
+                value={runId}
+                onChange={(e) => setRunId(e.target.value)}
+              />
+              <p className="text-xs text-slate-600 mt-1">
+                Naming a campaign records who was already sent to. If it is
+                interrupted, starting it again with the same name skips them
+                instead of messaging them twice.
               </p>
             </div>
 
@@ -128,7 +178,7 @@ export default function ProcessingPanel({
           <button
             className="btn-success flex-1"
             disabled={!canStart}
-            onClick={() => onStart(sendWA, delay, caption)}
+            onClick={() => onStart(sendWA, lo, hi, caption, runId)}
           >
             <Play className="w-4 h-4" />
             {sendWA ? `Send to ${contacts.length} Contacts` : `Generate ${contacts.length} Images`}

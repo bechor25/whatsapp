@@ -218,7 +218,9 @@ async def init_whatsapp():
 
 @app.get("/api/whatsapp/status")
 async def whatsapp_status():
-    return await whatsapp_service.check_status()
+    # transport tells the UI which pairing flow to describe: neonize shows a QR
+    # inside the page, playwright opens a Chromium window the user scans there.
+    return {"transport": WHATSAPP_TRANSPORT, **(await whatsapp_service.check_status())}
 
 
 @app.get("/api/whatsapp/debug-dom")

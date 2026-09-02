@@ -1,9 +1,8 @@
 services:
   app:
-    # Swap for your published image to run without building:
-    #   image: <your-dockerhub-user>/whatsapp-greeting-sender:latest
-    build: .
-    image: whatsapp-greeting-sender:latest
+    image: bechor/whatsapp:latest
+    # Uncomment to build locally instead of pulling the published image:
+    # build: .
     ports:
       - "8000:8000"
     environment:

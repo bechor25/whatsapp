@@ -92,14 +92,26 @@ export default function App() {
   }, []))
 
   /* ── Processing actions ──────────────────────────────────────────────── */
-  const handleStart = async (sendWA: boolean, delay: number, caption: string) => {
+  const handleStart = async (
+    sendWA: boolean,
+    delayMin: number,
+    delayMax: number,
+    caption: string,
+    runId: string,
+  ) => {
     await axios.post('/api/process/start', {
-      image_path:     image!.filePath,
-      contacts:       contacts,
-      text_config:    toSnake(textConfig),
-      send_whatsapp:  sendWA,
-      caption:        caption,
-      delay_seconds:  delay,
+      image_path:        image!.filePath,
+      contacts:          contacts,
+      text_config:       toSnake(textConfig),
+      send_whatsapp:     sendWA,
+      caption:           caption,
+      // A range makes each pause random. A constant interval is itself a
+      // signal to WhatsApp's spam detection, so the UI always sends both.
+      delay_seconds:     delayMin,
+      delay_max_seconds: delayMax,
+      // Naming the run lets an interrupted campaign resume without
+      // re-messaging everyone who already received their image.
+      run_id:            runId.trim() || null,
     })
   }
 

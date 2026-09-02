@@ -18,6 +18,7 @@ sends slow and randomised.
 import asyncio
 import os
 import re
+import time
 import traceback
 from typing import Dict, Optional
 
@@ -29,6 +30,12 @@ from neonize.utils.jid import build_jid
 
 class WhatsAppNeonizeService:
     """Automates WhatsApp via the multi-device protocol (no browser)."""
+
+    # Measured against whatsmeow: the first pairing code lives 60s, then a new
+    # one is pushed every 20s until the pairing attempt gives up (~6 codes).
+    # So a live QR is never old; going well past one rotation means pairing
+    # ended and only a reconnect will produce a usable code.
+    QR_STALE_SECONDS = 90
 
     def __init__(self, session_dir: str, output_dir: str = "outputs"):
         self.session_dir = os.path.abspath(session_dir)
@@ -42,6 +49,7 @@ class WhatsAppNeonizeService:
 
         self._logged_in = False
         self._qr_ready = False
+        self._qr_issued_at: float = 0.0
         self._last_error: Optional[str] = None
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -76,6 +84,7 @@ class WhatsAppNeonizeService:
                 # Render the pairing QR to a PNG the frontend can display.
                 segno.make_qr(data_qr).save(self._qr_file, scale=6, border=2)
                 self._qr_ready = True
+                self._qr_issued_at = time.time()
 
             @self._client.event(ConnectedEv)
             async def _on_connected(_client, _ev):
@@ -148,11 +157,21 @@ class WhatsAppNeonizeService:
             return {"logged_in": True, "message": "WhatsApp is connected ✓"}
 
         if self._qr_ready and os.path.exists(self._qr_file):
+            age = time.time() - self._qr_issued_at
+            stale = age > self.QR_STALE_SECONDS
             return {
                 "logged_in": False,
-                "message": "Scan the QR code with WhatsApp on your phone.",
-                # Cache-busted so a re-pairing QR replaces the previous image.
-                "qr_url": f"/outputs/wa_qr.png?t={int(os.path.getmtime(self._qr_file))}",
+                "message": (
+                    "Pairing timed out — click Restart Pairing for a new code."
+                    if stale else
+                    "Scan the QR code with WhatsApp on your phone."
+                ),
+                # Cache-busted so each rotated code replaces the previous image.
+                "qr_url": f"/outputs/wa_qr.png?t={int(self._qr_issued_at)}",
+                "qr_age_seconds": round(age, 1),
+                # whatsmeow refreshes the code by itself; the UI only needs to
+                # step in once that stops, which is what stale means.
+                "qr_stale": stale,
             }
 
         return {"logged_in": False, "message": "Connecting to WhatsApp…"}
@@ -168,6 +187,7 @@ class WhatsAppNeonizeService:
         self._client = None
         self._logged_in = False
         self._qr_ready = False
+        self._qr_issued_at = 0.0
 
     # ── Sending ───────────────────────────────────────────────────────────────
 

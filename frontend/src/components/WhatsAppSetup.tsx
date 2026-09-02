@@ -1,36 +1,72 @@
-import { useEffect, useState } from 'react'
-import { MessageCircle, CheckCircle, XCircle, Loader, RefreshCw, ExternalLink } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { MessageCircle, CheckCircle, XCircle, Loader, RefreshCw, ExternalLink, Smartphone } from 'lucide-react'
 import axios, { type AxiosError } from 'axios'
 
 interface Props {
   onStatusChange: (loggedIn: boolean) => void
 }
 
+type Transport = 'neonize' | 'playwright'
+
 export default function WhatsAppSetup({ onStatusChange }: Props) {
   const [initialized, setInitialized] = useState(false)
   const [loggedIn,    setLoggedIn]    = useState(false)
-  const [message,     setMessage]     = useState('WhatsApp Web not started yet.')
+  const [message,     setMessage]     = useState('Not connected yet.')
   const [loading,     setLoading]     = useState(false)
   const [polling,     setPolling]     = useState(false)
-  // Set by the neonize transport, which pairs via a QR rendered in this page
-  // rather than in a browser window it controls.
+  // Which pairing flow the backend is running. neonize shows a QR in this page;
+  // playwright opens a Chromium window the user scans there instead.
+  const [transport,   setTransport]   = useState<Transport>('neonize')
   const [qrUrl,       setQrUrl]       = useState<string | null>(null)
 
-  /* ── Poll status every 3 s once browser is up ──────────────────────── */
+  // Guards the auto-refresh so an expiring QR triggers exactly one re-pair,
+  // not one per poll tick.
+  const refreshingRef = useRef(false)
+
+  const isBrowserFlow = transport === 'playwright'
+
+  const applyStatus = (data: {
+    transport?: Transport
+    logged_in: boolean
+    message: string
+    qr_url?: string
+    qr_stale?: boolean
+  }) => {
+    if (data.transport) setTransport(data.transport)
+    setMessage(data.message)
+    setQrUrl(data.qr_url ?? null)
+    if (data.logged_in) {
+      setLoggedIn(true)
+      setPolling(false)
+      setQrUrl(null)
+      onStatusChange(true)
+      return true
+    }
+    return false
+  }
+
+  /* ── Poll status while unpaired ─────────────────────────────────────── */
   useEffect(() => {
     if (!initialized || loggedIn) return
     setPolling(true)
     const id = setInterval(async () => {
       try {
         const { data } = await axios.get('/api/whatsapp/status')
-        setMessage(data.message)
-        setQrUrl(data.qr_url ?? null)
-        if (data.logged_in) {
-          setLoggedIn(true)
-          setPolling(false)
-          setQrUrl(null)
-          onStatusChange(true)
+        if (applyStatus(data)) {
           clearInterval(id)
+          return
+        }
+        // whatsmeow rotates the pairing code every 60s by itself, so normally
+        // there is nothing to do. Only once it stops rotating has the pairing
+        // attempt died, and only then is a reconnect needed to get a live code.
+        if (data.qr_stale && !refreshingRef.current) {
+          refreshingRef.current = true
+          setMessage('Pairing timed out — generating a new code…')
+          try {
+            await axios.post('/api/whatsapp/init')
+          } finally {
+            refreshingRef.current = false
+          }
         }
       } catch { /* ignore */ }
     }, 3000)
@@ -60,14 +96,7 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
   const checkNow = async () => {
     try {
       const { data } = await axios.get('/api/whatsapp/status')
-      setMessage(data.message)
-      setQrUrl(data.qr_url ?? null)
-      if (data.logged_in) {
-        setLoggedIn(true)
-        setPolling(false)
-        setQrUrl(null)
-        onStatusChange(true)
-      }
+      applyStatus(data)
     } catch { /* ignore */ }
   }
 
@@ -78,9 +107,11 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
           <MessageCircle className="w-5 h-5 text-green-400" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-100">WhatsApp Web Setup</h3>
+          <h3 className="font-semibold text-slate-100">WhatsApp Setup</h3>
           <p className="text-xs text-slate-500">
-            Opens a browser — scan QR once, session is saved for future runs
+            {isBrowserFlow
+              ? 'Opens a browser — scan the QR once, session is saved for future runs'
+              : 'Scan the QR once from your phone — session is saved for future runs'}
           </p>
         </div>
       </div>
@@ -108,12 +139,18 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
         </div>
       </div>
 
-      {/* Pairing QR (neonize transport) */}
+      {/* Pairing QR — rendered in-page by the neonize transport */}
       {!loggedIn && qrUrl && (
-        <div className="p-4 bg-white rounded-2xl border border-slate-700 flex flex-col items-center gap-3">
+        <div className="p-4 bg-white rounded-2xl border border-slate-300 flex flex-col items-center gap-3">
           <img src={qrUrl} alt="WhatsApp pairing QR code" className="w-56 h-56" />
-          <p className="text-xs text-slate-600 text-center max-w-xs">
-            WhatsApp on your phone → Settings → Linked Devices → Link a Device
+          <div className="flex items-center gap-2 text-slate-700">
+            <Smartphone className="w-4 h-4 shrink-0" />
+            <p className="text-xs text-center">
+              WhatsApp → Settings → Linked Devices → <strong>Link a Device</strong>
+            </p>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            The code refreshes itself — just scan whatever is shown
           </p>
         </div>
       )}
@@ -123,10 +160,15 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
         <div className="p-4 bg-slate-800/40 rounded-xl border border-slate-700 space-y-2 text-sm">
           <p className="font-medium text-slate-300">How it works:</p>
           <ol className="space-y-1.5 text-slate-400 list-decimal list-inside">
-            <li>Click <span className="text-violet-400 font-medium">Launch WhatsApp Browser</span></li>
-            <li>A Chrome window opens → navigate to
-              <span className="text-blue-400 font-mono ml-1 text-xs">web.whatsapp.com</span></li>
-            <li>Scan the QR code with your phone's WhatsApp</li>
+            <li>Click <span className="text-violet-400 font-medium">
+              {isBrowserFlow ? 'Launch WhatsApp Browser' : 'Connect WhatsApp'}</span></li>
+            {isBrowserFlow ? (
+              <li>A Chrome window opens on
+                <span className="text-blue-400 font-mono ml-1 text-xs">web.whatsapp.com</span></li>
+            ) : (
+              <li>A QR code appears right here on this page</li>
+            )}
+            <li>Scan it with your phone's WhatsApp (Linked Devices)</li>
             <li>Session is saved — future runs won't need a re-scan</li>
           </ol>
         </div>
@@ -144,7 +186,9 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
             ) : (
               <ExternalLink className="w-4 h-4" />
             )}
-            {initialized ? 'Restart Browser' : 'Launch WhatsApp Browser'}
+            {initialized
+              ? 'Restart Pairing'
+              : isBrowserFlow ? 'Launch WhatsApp Browser' : 'Connect WhatsApp'}
           </button>
         )}
 
@@ -158,7 +202,7 @@ export default function WhatsAppSetup({ onStatusChange }: Props) {
 
       {loggedIn && (
         <p className="text-center text-sm text-emerald-400">
-          ✓ You are logged in to WhatsApp Web. Proceed to the next step.
+          ✓ Connected to WhatsApp. Proceed to the next step.
         </p>
       )}
     </div>
